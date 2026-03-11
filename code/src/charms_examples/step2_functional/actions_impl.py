@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Mapping
 import yaml
 from error_types import *
 from errors_handling import StatusActions
-
 from step2_functional.action_types import ConfigActions
 from step2_functional.charm import CONFIG_HASH_PATH, PROMETHEUS_CONFIG
 from step2_functional.output_types import *

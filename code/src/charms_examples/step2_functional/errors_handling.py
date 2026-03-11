@@ -4,9 +4,9 @@ from logging import Logger
 from typing import assert_never
 
 from error_types import *
+from step2_functional.action_types import StatusActions
 
 from result import *
-from step2_functional.action_types import StatusActions
 
 
 def handle_errors(status_actions: StatusActions, logger: Logger, error: ProcessError) -> None:

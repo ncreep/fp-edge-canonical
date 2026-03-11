@@ -5,7 +5,6 @@ from logging import Logger
 from typing import TYPE_CHECKING, assert_never
 
 from error_types import *
-
 from step2_functional.action_types import ConfigActions
 from step2_functional.output_types import *
 
