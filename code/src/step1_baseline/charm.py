@@ -3,8 +3,6 @@
 # Copyright 2025 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""A Juju charm for Prometheus on Kubernetes."""
-
 import hashlib
 import logging
 import re
@@ -45,22 +43,16 @@ PROMETHEUS_DIR = "/etc/prometheus"
 PROMETHEUS_CONFIG = f"{PROMETHEUS_DIR}/prometheus.yml"
 CONFIG_HASH_PATH = f"{PROMETHEUS_DIR}/config.sha256"
 
-# Paths for the private key and the signed server certificate.
-# These are used to present to clients and to authenticate other servers.
 KEY_PATH = f"{PROMETHEUS_DIR}/server.key"
 CERT_PATH = f"{PROMETHEUS_DIR}/server.cert"
 WEB_CONFIG_PATH = f"{PROMETHEUS_DIR}/prometheus-web-config.yml"
 
-# To get the behaviour consistent with mimir that doesn't allow lower values
-# than 100k exemplars, we set the same floor in prometheus. If the user specifies
-# a lower but positive value, we configure Prometheus to store 100k exemplars.
 EXEMPLARS_FLOOR = 100000
 
 logger = logging.getLogger(__name__)
 
 
 def to_tuple(status: StatusBase) -> Tuple[str, str]:
-    """Convert a StatusBase to tuple, so it is marshallable into StoredState."""
     return status.name, status.message
 
 
@@ -83,46 +75,33 @@ def blocked_status(message: str) -> Tuple[str, str]:
 
 
 def sha256(hashable) -> str:
-    """Use instead of the builtin hash() for repeatable values."""
     if isinstance(hashable, str):
         hashable = hashable.encode("utf-8")
     return hashlib.sha256(hashable).hexdigest()
 
 
 class ConfigError(Exception):
-    """Configuration specific errors."""
-
     pass
 
 
 class CompositeStatus(TypedDict):
-    """Per-component status holder."""
-
-    # These are going to go into stored state, so we must use marshallable objects.
-    # They are passed to StatusBase.from_name().
     retention_size: Tuple[str, str]
     config: Tuple[str, str]
 
 
 @dataclass
 class TLSConfig:
-    """TLS configuration received by the charm over the `certificates` relation."""
-
     server_cert: str
     ca_cert: str
     private_key: str
 
 
 class PrometheusCharm(CharmBase):
-    """A Juju Charm for Prometheus."""
-
     _stored = StoredState()
 
     def __init__(self, *args):
         super().__init__(*args)
         self._fqdn = socket.getfqdn()
-        # Prometheus has a mix of pull and push statuses. We need stored state for push statuses.
-        # https://discourse.charmhub.io/t/its-probably-ok-for-a-unit-to-go-into-error-state/13022
         self._stored.set_default(
             status=CompositeStatus(
                 retention_size=_STATUS_ACTIVE,
@@ -135,9 +114,6 @@ class PrometheusCharm(CharmBase):
         self.container = self.unit.get_container(self._name)
 
         self._csr_attributes = CertificateRequestAttributes(
-            # the `common_name` field is required but limited to 64 characters.
-            # since it's overridden by sans, we can use a short,
-            # constrained value like app name.
             common_name=self.app.name,
             sans_dns=frozenset((self._fqdn,)),
         )
@@ -169,25 +145,20 @@ class PrometheusCharm(CharmBase):
 
     @property
     def _prometheus_layer(self) -> Layer:
-        """Construct the pebble layer.
-
-        Returns:
-            a Pebble layer specification for the Prometheus workload container.
-        """
-        layer_config = {
-            "summary": "Prometheus layer",
-            "description": "Pebble layer configuration for Prometheus",
-            "services": {
-                self._name: {
-                    "override": "replace",
-                    "summary": "prometheus daemon",
-                    "command": self._generate_command(),
-                    "startup": "enabled",
-                }
-            },
-        }
-
-        return Layer(layer_config)  # pyright: ignore
+        return Layer(
+            {
+                "summary": "Prometheus layer",
+                "description": "Pebble layer configuration for Prometheus",
+                "services": {
+                    self._name: {
+                        "override": "replace",
+                        "summary": "prometheus daemon",
+                        "command": self._generate_command(),
+                        "startup": "enabled",
+                    }
+                },
+            }
+        )
 
     def _configure(self, _):
         if not self.container.can_connect():
@@ -251,10 +222,6 @@ class PrometheusCharm(CharmBase):
         return True
 
     def _generate_prometheus_config(self) -> bool:
-        """Construct Prometheus configuration and write to filesystem.
-
-        Returns a boolean indicating if a new configuration was pushed.
-        """
         prometheus_config = {
             "global": {
                 "scrape_interval": "1m",
@@ -336,11 +303,6 @@ class PrometheusCharm(CharmBase):
                 )
 
     def _pull(self, path) -> Optional[str]:
-        """Pull file from container (without raising pebble errors).
-
-        Returns:
-            File contents if exists; None otherwise.
-        """
         try:
             return cast(str, self.container.pull(path, encoding="utf-8").read())
         except (FileNotFoundError, PebbleError):
@@ -348,7 +310,6 @@ class PrometheusCharm(CharmBase):
             return None
 
     def _push(self, path, contents):
-        """Push file to container, creating subdirs as necessary."""
         self.container.push(path, contents, make_dirs=True, encoding="utf-8")
 
     @property
@@ -361,11 +322,6 @@ class PrometheusCharm(CharmBase):
         return 0
 
     def _percent_string_to_ratio(self, percentage: str) -> float:
-        """Convert a string representation of percentage of 0-100%, to a 0-1 ratio.
-
-        Raises:
-            ValueError, if the percentage string is invalid or not within range.
-        """
         if not percentage.endswith("%"):
             raise ValueError("Must be a number followed by '%', e.g. '80%'")
         value = float(percentage[:-1]) / 100.0
@@ -374,35 +330,19 @@ class PrometheusCharm(CharmBase):
         return value
 
     def _get_pvc_capacity(self) -> str:
-        """Get PVC capacity from pod name.
-
-        This may need to be handled differently once Juju supports multiple storage instances
-        for k8s (https://bugs.launchpad.net/juju/+bug/1977775).
-        """
-        # Assuming the storage name is "databases" (must match metadata.yaml).
-        # This assertion would be picked up by every integration test so no concern this would
-        # reach production.
         assert "database" in self.model.storages, (
             "The 'database' storage is no longer in metadata: must update literals in charm code."
         )
 
-        # Get PVC capacity from kubernetes
         client = Client()  # pyright: ignore
         pod_name = self.unit.name.replace("/", "-", -1)
 
-        # Take the first volume whose name starts with "<app-name>-database-".
-        # The volumes array looks as follows for app "am" and storage "data":
-        # 'volumes': [{'name': 'am-data-d7f6a623',
-        #              'persistentVolumeClaim': {'claimName': 'am-data-d7f6a623-am-0'}}, ...]
         pvc_name = ""
         for volume in cast(
             Pod, client.get(Pod, name=pod_name, namespace=self.model.name)
         ).spec.volumes:  # pyright: ignore
             if not volume.persistentVolumeClaim:
-                # The volumes 'charm-data' and 'kube-api-access-xxxxx' do not have PVCs - filter
-                # those out.
                 continue
-            # claimName looks like this: 'prom-database-325a0ee8-prom-0'
             matcher = re.compile(rf"^{self.app.name}-database-.*?-{pod_name}$")
             if matcher.match(volume.persistentVolumeClaim.claimName):
                 pvc_name = volume.persistentVolumeClaim.claimName
@@ -424,20 +364,9 @@ class PrometheusCharm(CharmBase):
             "storage"
         ]
 
-        # The other kind of storage to query for is
-        # client.get(...).spec.resources.requests["storage"]
-        # but to ensure prometheus does not fill up storage we need to limit the actual value
-        # (status.capacity) and not the requested value (spec.resources.requests).
-
         return capacity
 
     def _generate_command(self) -> str:
-        """Construct command to launch Prometheus.
-
-        Returns:
-            a string consisting of Prometheus command and associated
-            command line options.
-        """
         config = self.model.config
         args = [
             f"--config.file={PROMETHEUS_CONFIG}",
@@ -450,9 +379,6 @@ class PrometheusCharm(CharmBase):
         if self._web_config():
             args.append(f"--web.config.file={WEB_CONFIG_PATH}")
 
-        # For stripPrefix middleware to work correctly, we need to set web.external-url and
-        # web.route-prefix in a particular way.
-        # https://github.com/prometheus/prometheus/issues/1191
         external_url = self.most_external_url.rstrip("/")
         args.append(f"--web.external-url={external_url}")
         args.append("--web.route-prefix=/")
@@ -484,9 +410,6 @@ class PrometheusCharm(CharmBase):
             )
 
         else:
-            # `storage.tsdb.retention.size` uses the legacy binary format, so "GB" and not "GiB"
-            # https://github.com/prometheus/prometheus/issues/10768
-            # For simplicity, always communicate to prometheus in GiB
             try:
                 capacity = convert_k8s_quantity_to_legacy_binary_gigabytes(
                     self._get_pvc_capacity(), ratio
@@ -511,13 +434,11 @@ class PrometheusCharm(CharmBase):
 
     @property
     def internal_url(self) -> str:
-        """Returns workload's FQDN. Used for ingress."""
         scheme = "https" if self._tls_available else "http"
         return f"{scheme}://{self._fqdn}:{self._port}"
 
     @property
     def external_url(self) -> Optional[str]:
-        """Return the external hostname received from an ingress relation, if it exists."""
         try:
             if ingress_url := self.ingress.url:
                 return ingress_url
@@ -527,12 +448,6 @@ class PrometheusCharm(CharmBase):
 
     @property
     def most_external_url(self) -> str:
-        """Return the most external url known about by this charm.
-
-        This will return the first of:
-        - the external URL, if the ingress is configured and ready
-        - the internal URL
-        """
         external_url = self.external_url
         if external_url:
             return external_url
@@ -541,7 +456,6 @@ class PrometheusCharm(CharmBase):
 
     @property
     def log_level(self):
-        """The log level configured for the charm."""
         allowed_log_levels = ["debug", "info", "warn", "error", "fatal"]
         log_level = cast(str, self.model.config["log_level"]).lower()
 
@@ -569,10 +483,6 @@ class PrometheusCharm(CharmBase):
         return bool(self._tls_config)
 
     def _web_config(self) -> Optional[dict]:
-        """Return the web.config.file contents as a dict, if TLS is enabled; otherwise None.
-
-        Ref: https://prometheus.io/docs/prometheus/latest/configuration/https/
-        """
         if self._tls_available:
             return {
                 "tls_server_config": {
