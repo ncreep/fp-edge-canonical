@@ -264,7 +264,7 @@ layout: true
 ---
 
 ```python
-def foo(x: int) -> str:
+def foo(x: int) -> int:
   return x + 1
 ```
 
@@ -1464,7 +1464,7 @@ def process_job(job: dict) -> dict:
 ---
 
 ```python
-def process_job(job: dict) -> Result[ConfigError, dict]
+def process_job(job: dict) -> WithErrors[dict]
 ```
 
 --
@@ -2497,7 +2497,7 @@ def compute(
 
 # imperative shell
 def apply(
-  outcome: ConfigOutcome) -> Result[ApplyError, None]
+  outcome: Outcome) -> Result[ApplyError, None]
 {{content}}
 --
 
