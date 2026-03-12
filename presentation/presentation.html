@@ -1,0 +1,2625 @@
+<!doctype html>
+<html>
+  <head>
+    <title>The Functional Edge for Modern Software Engineers</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <link rel="stylesheet" type="text/css" href="style.css" />
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle, transition, intro
+
+# The Functional Edge for Modern <br /> Software Engineers
+
+.horizontalCentered.caption[Daniel Beskin]
+
+---
+class: outline-bullets
+
+## On Today's Menu
+1. Functional Programming fundamentals
+--
+
+1. Practical applications
+--
+
+  - Testing pure functions
+  - Functional validation
+  - Functional pipelines
+--
+
+1. Design and architecture
+--
+
+  - Functional domain modeling
+  - Functional core, imperative shell
+--
+
+1. Case study
+--
+
+1. Hands-on practice
+
+
+---
+
+layout: false
+class: center, middle, transition
+
+# Functional Programming Fundamentals
+
+---
+layout: true
+
+## What is Functional Programming?
+
+---
+
+.centered.bigCode[
+```haskell
+fibs = 0 : 1 : zipWith (+) fibs (tail fibs)
+```
+]
+
+???
+- Using Fibonacci is a recurring example when talking about FP
+- It's as elegant as it is useless
+- I heard someone using Fibonacci for stress-testing a server
+- But I really can't think of any other use for it
+
+---
+
+- Just like OOP, there's no single good definition
+--
+
+- "You know it when you see it"
+--
+
+- A minimalistic definition:
+> Putting the usage of **pure functions** to the forefront
+
+--
+- ...
+
+--
+- Who cares?
+
+---
+
+layout: true
+
+## We All Have Problems
+
+---
+---
+
+- Maintainability
+--
+
+- Testability
+--
+
+- Reusability
+--
+
+- More words that end with "...ability"
+
+--
+
+- None of these mention "pure function-ability"
+
+---
+
+layout: true
+
+## Spooky Action at a Distance
+
+---
+
+---
+
+- You change something here
+--
+
+- Something breaks over there
+
+--
+- "Secret" channels of communication
+
+--
+- Typically mutation and mutable data
+
+???
+- And "conceptual mutation" where a change in the state of the world (like writing to a file) is propagated back into the code in another place
+
+---
+
+layout: true
+
+## Mocking the World
+
+---
+
+---
+
+- Tests are important
+--
+
+- But so tedious...
+--
+
+- You have to mock/patch/stub
+
+--
+  - Objects
+  - Env vars
+  - File systems
+  - ...
+--
+
+  - Interaction with the world
+
+---
+
+layout: true
+
+## Feeling a Bit DRY
+
+---
+
+- I don't like repeating myself
+
+--
+
+- More code == more liability
+
+--
+
+- But writing reusable code is difficult
+
+--
+
+- How do you disentangle yourself from your surroundings?
+
+---
+
+layout: true
+
+## What We Really Want
+---
+
+Reasonable code:
+
+--
+- Doesn't have hidden spooky (mutable) outputs
+
+--
+- Doesn't interact with the outer world
+
+--
+- Has clear boundaries with its surroundings
+
+---
+
+~~Reasonable code~~ Pure functions:
+
+- Don't have hidden spooky (mutable) outputs
+- Don't interact with the outer world
+- Have clear boundaries with their surroundings
+
+--
+
+<br />
+
+> Putting the usage of **pure functions** to the forefront
+
+
+---
+
+layout: true
+
+## Pure functions
+---
+
+What it is
+--
+
+- A function in the mathematical sense
+--
+
+- For every input there's an output
+
+--
+
+- Deterministic
+
+--
+
+- An idealization
+
+???
+- E.g., sometimes we can't practically account for all possible exceptions
+
+---
+
+What it isn't
+--
+
+- Employing mutation on its inputs/outputs
+
+--
+
+- Doing I/O
+
+--
+
+- Producing random outputs
+
+---
+
+layout: true
+## Good
+---
+---
+
+```python
+def foo(x: int) -> str:
+  return x + 1
+```
+
+---
+
+```python
+def foo(s: str) -> str:
+    if len(s) > 5:
+        result = s[2:]
+    else:
+        result = s
+
+    return result
+```
+
+---
+
+```python
+def sum_list(numbers: list[int]) -> int:
+    total = 0
+
+    for n in numbers:
+        total += n
+
+    return total
+```
+
+---
+
+```python
+def foo(self, x: int) -> int:
+    return self.count + x
+```
+--
+
+<br />
+<sup>*</sup> Assuming `count` is frozen
+
+---
+
+layout: true
+## Bad
+
+---
+
+---
+```python
+def foo() -> datetime:
+    return datetime.now()
+```
+
+???
+- Another rule of thumb for "bad" things is: will it require mocking in tests?
+
+---
+
+```python
+def foo(d: dict) -> None:
+    d["my_key"] = d.get("my_key", 0) + 1
+```
+---
+
+```python
+def foo() -> str:
+    with open("/some/path", "r") as f:
+        return f.read()
+```
+
+---
+
+```python
+def foo(self) -> None:
+    self.count += 1
+```
+
+???
+- There's nothing in classes that's inherently un-functional
+- But if you mutate anything, that breaks purity
+
+---
+
+layout: true
+
+## Good or Bad?
+---
+
+```python
+def foo(x: int) -> None:
+  logger.info("adding")
+
+  return x + 1
+```
+
+???
+- We can usually ignore the side-effect of producing logs
+- We call such side-effects "benign effects"
+- Since it's invisible to the application code, and no logic or decision depends on it
+- But sometimes logs are part of the product too, and we want to verify them
+- In these cases it's worthwhile treating logs as side-effects that we need to keep away from pure functions
+
+---
+
+```python
+cache = {}
+
+def foo(x: int) -> int:
+    if x not in cache:
+        cache[x] = x * 2
+
+    return cache[x]
+```
+
+???
+- This breaks the rules by mutating a dictionary
+- But whether this is observable or not depends on how you use the cache
+
+---
+
+```python
+def foo(x: int):
+  if x > 5:
+    raise Exception("nope")
+  else:
+    return x * x
+```
+
+---
+
+layout: true
+
+## The Benefits of Pure Functions
+
+---
+---
+
+- No spooky action
+--
+
+- No need to mock interaction
+--
+
+- Modular
+- Easy to extract and reuse
+
+???
+- Not just for reusability but also for easy parallelization
+
+---
+
+layout: true
+## Wait, There's More
+
+---
+
+Guess who?
+
+```python
+def foo() -> None
+```
+--
+
+```python
+def foo(x: int) -> str
+```
+
+--
+
+```python
+def foo[A](x: list[A]) -> Optional[A]
+```
+--
+
+- The type of pure functions carries more meaning
+- Focus on values
+
+???
+- This gives us plenty of motivation to represent as many things as values
+- Especially values that have descriptive types
+- Descriptive types are also great as a form executable and enforceable documentation
+- Not only for humans, but for AIs as well
+
+--
+
+- "Explicit is better than implicit"
+---
+
+layout: true
+
+## But Is It Web Scale?
+
+---
+
+- You can't stay pure forever
+--
+
+- Code needs to interact with the world
+
+???
+- Otherwise you're just programming a heating box
+--
+
+- But you can pull out pure fragments
+
+--
+
+- The more, the merrier
+
+--
+
+- Easier said than done
+
+
+---
+layout: true
+
+## The Functional Subset of Python
+---
+
+???
+
+- Like any good paradigm it is defined more by what it subtracts from our lives rather than what it adds
+- Just like one of OOPs most notable features is hiding away information
+- So there are limitations that functional programming puts on the code that we can write
+
+---
+
+- No value reassignment
+
+???
+- Initialize values when you declare them
+
+--
+
+- No `self` mutation
+--
+
+  - Prefer `Final` fields
+--
+
+- No IO
+--
+
+  - No web calls
+  - No system calls
+  - No environment fetching
+  - No ...
+
+---
+
+- Favor immutability
+
+???
+- Being immutable is very liberating
+- Probably the biggest single step you can take towards functional programming
+- You no longer have to worry about sharing data
+- No need to do defensive copying
+- Once you have a value you know it's "done", nothing else can happen to it
+- You don't have to look around to figure out who and when initialized it
+- Just follow the call chain
+- No invariants to be broken
+--
+
+- `dataclass(frozen=True)`
+
+--
+
+- Prefer `Sequence`, `FrozenSet`, `Mapping`, ...
+
+--
+
+- If you want to mutate, create a modified copy
+
+---
+
+- Pretend `list` and `dict` are immutable
+
+???
+- `list` and `dict` are mutable and we would rather avoid them
+- But they are ubiquitous and hard to avoid
+- So we can pretend they are immutable
+- If we don't trust their source, make a defensive copy
+
+--
+
+  - `a + b`  
+  `a.append(b)`
+--
+
+  - `sorted(a)`  
+  `a.sort()`
+--
+
+  - `a | b`  
+  `a |= b`
+--
+
+  - `a | {"foo": 1}`  
+  `a["foo"] = 1`
+
+--
+- "Although practicality beats purity"
+---
+
+What's left:
+--
+
+- Conditional logic
+--
+
+- Building up data
+
+--
+
+- Destructuring data
+
+--
+
+- Can't avoid some friction
+
+---
+
+layout: true
+## Functional Styles
+
+---
+
+---
+- `map`, `filter`, etc.
+
+???
+- This style of programming "already won"
+- In the sense that it's very widespread and almost all modern languages support it
+- Also equivalent to list comprehensions
+
+--
+
+- Typed vs. untyped
+- Pure vs. impure
+
+---
+
+- We will focus on the typed, pure-ish style
+--
+
+- Start from pure functions
+- With well defined input and outputs
+
+--
+
+- The rest will follow
+
+--
+
+- This is our **functional edge**
+
+--
+
+- It's going to get intense...
+
+---
+
+layout: false
+class: center, middle, transition
+
+# Testing Pure Functions
+
+---
+layout: true
+
+## All I Wanted Was a ~~Pepsi~~ Test
+
+---
+
+```python
+def update_alert_rules(self, relation: Relation) -> None
+```
+
+--
+- Writes some files
+- Special logic for file names
+
+---
+
+```python
+def test_alert_rules_filename():
+    relation = { "alert_rules": { "groups": ...}}
+{{content}}
+```
+--
+
+    expected = "..."
+{{content}}
+--
+
+    result = run_with_relation(relation)
+{{content}}
+--
+
+    assert result == expected
+
+---
+```python
+*def test_alert_rules_filename(harness):
+    relation = { "alert_rules": { "groups": ...}}
+
+    expected = "..."
+
+    result = run_with_relation(relation)
+
+    assert result == expected
+```
+---
+```python
+def test_alert_rules_filename(harness):
+*   rel_id = harness.add_relation(...)
+*   harness.add_relation_unit(rel_id, ...)
+
+    relation = { "alert_rules": { "groups": ...}}
+
+    expected = "..."
+
+    result = run_with_relation(relation)
+
+    assert result == expected
+```
+
+---
+```python
+def test_alert_rules_filename(harness):
+    rel_id = harness.add_relation(...)
+    harness.add_relation_unit(rel_id, ...)
+
+    relation = { "alert_rules": { "groups": ...}}
+
+*   harness.update_relation_data(
+*       rel_id, "remote-app", relation)
+
+    expected = "..."
+
+    result = run_with_relation(relation)
+
+    assert result == expected
+```
+---
+```python
+def test_alert_rules_filename(harness):
+    rel_id = harness.add_relation(...)
+    harness.add_relation_unit(rel_id, ...)
+
+    relation = { "alert_rules": { "groups": ...}}
+
+    harness.update_relation_data(
+        rel_id, "remote-app", relation)
+
+    expected = "..."
+
+*   container = harness.get_container("...")
+*   result = Path(container.lst_files("...")[0]).name
+
+    assert result == expected
+```
+
+???
+- The whole test is happening via spooky action at a distance
+- And you don't actually care about all the file writing
+- You just want to make sure the path shape is correct
+
+---
+
+Are we there yet?
+
+--
+
+```python
+@pytest.fixture
+def harness():
+  with k8s_resource_multipatch, \
+    patch("lightkube.core.client.GenericSyncClient"), \
+    patch("Prometheus.reload_configuration", ...), \
+    prom_multipatch:
+      h = Harness(PrometheusCharm)
+      h.set_model_name("test-model")
+      patch.object(PrometheusCharm, ...).start()
+      h.container_pebble_ready("prometheus")
+      h.handle_exec("prometheus", ...)
+      h.begin_with_initial_hooks()
+      yield h
+      h.cleanup()
+```
+
+---
+layout: true
+## Testing Side Effects
+---
+
+- Obscures intent
+--
+
+- Error prone
+--
+
+- Heavy
+--
+
+- Difficult to parallelize
+
+
+---
+
+```python
+def update_alert_rules(self, relation: Relation) -> None:
+    alert_rules = relation.data[relation.app].get(...)
+
+    labels = alert_rules["groups"][...]
+    topology = JujuTopology(model = ...)
+    filename = (
+        "juju_"
+        + "_".join([topology.model, ...])
+        + f"_{relation.name}_{relation.id}"
+        + ".rules"
+    ).replace("/", "_")
+
+    path = f".../{filename}"
+
+    self.container.push(path, ...)
+```
+
+???
+- Fetching from `relation.data` requires interacting with the container, thus requires mocking
+
+---
+
+```python
+def update_alert_rules(self, relation: Relation) -> None:
+    alert_rules = relation.data[relation.app].get(...)
+
+*   labels = alert_rules["groups"][...]
+*   topology = JujuTopology(model = ...)
+*   filename = (
+*       "juju_"
+*       + "_".join([topology.model, ...])
+*       + f"_{relation.name}_{relation.id}"
+*       + ".rules"
+*   ).replace("/", "_")
+
+    path = f".../{filename}"
+
+    self.container.push(path, ...)
+```
+
+---
+
+```python
+def rules_filename(
+    alert_rules: dict, name: str, id: int) -> str{{content}}
+```
+--
+:
+     labels = alert_rules["groups"][...]
+     topology = JujuTopology(model = ...)
+
+     filename = (
+         "juju_"
+         + "_".join([topology.model, ...])
+         + f"_{name}_{id}"
+         + ".rules"
+     ).replace("/", "_")
+
+    return filename
+---
+
+```python
+def update_alert_rules(self, relation: Relation) -> None:
+    alert_rules = relation.data[relation.app].get(...)
+
+*   filename = rules_filename(
+*       alert_rules, relation.name, relation.id)
+    path = f".../{filename}"
+
+    self.container.push(path, ...)
+```
+
+---
+
+layout: true
+
+## Testing Pure Functions
+
+---
+
+```python
+def test_alert_rules_filename(harness):
+    rel_id = harness.add_relation(...)
+    harness.add_relation_unit(rel_id, ...)
+
+    relation = { "alert_rules": { "groups": ...}}
+
+    harness.update_relation_data(
+        rel_id, "remote-app", relation)
+
+    expected = "..."
+
+    container = harness.get_container("...")
+    result = Path(container.lst_files("...")[0]).name
+
+    assert result == expected
+```
+
+---
+
+```python
+*def test_alert_rules_filename(harness):
+    rel_id = harness.add_relation(...)
+    harness.add_relation_unit(rel_id, ...)
+
+    relation = { "alert_rules": { "groups": ...}}
+
+    harness.update_relation_data(
+        rel_id, "remote-app", relation)
+
+    expected = "..."
+
+    container = harness.get_container("...")
+    result = Path(container.lst_files("...")[0]).name
+
+    assert result == expected
+```
+
+---
+
+```python
+def test_alert_rules_filename():
+*   rel_id = harness.add_relation(...)
+*   harness.add_relation_unit(rel_id, ...)
+
+    relation = { "alert_rules": { "groups": ...}}
+
+    harness.update_relation_data(
+        rel_id, "remote-app", relation)
+
+    expected = "..."
+
+    container = harness.get_container("...")
+    result = Path(container.lst_files("...")[0]).name
+
+    assert result == expected
+```
+---
+
+```python
+def test_alert_rules_filename():
+*   relation = { "alert_rules": { "groups": ...}}
+
+    harness.update_relation_data(
+        rel_id, "remote-app", relation)
+
+    expected = "..."
+
+    container = harness.get_container("...")
+    result = Path(container.lst_files("...")[0]).name
+
+    assert result == expected
+```
+
+---
+
+```python
+def test_alert_rules_filename():
+*   alert_rules = { "groups": ... }
+*   name = "metrics_endpoint"
+*   id = 1
+
+    harness.update_relation_data(
+        rel_id, "remote-app", relation)
+
+    expected = "..."
+
+    container = harness.get_container("...")
+    result = Path(container.lst_files("...")[0]).name
+
+    assert result == expected
+```
+
+---
+
+```python
+def test_alert_rules_filename():
+    alert_rules = { "groups": ... }
+    name = "metrics_endpoint"
+    id = 1
+
+*   harness.update_relation_data(
+*       rel_id, "remote-app", relation)
+
+    expected = "..."
+
+    container = harness.get_container("...")
+    result = Path(container.lst_files("...")[0]).name
+
+    assert result == expected
+```
+
+---
+
+```python
+def test_alert_rules_filename():
+    alert_rules = { "groups": ... }
+    name = "metrics_endpoint"
+    id = 1
+
+    expected = "..."
+
+*   container = harness.get_container("...")
+*   result = Path(container.lst_files("...")[0]).name
+
+    assert result == expected
+```
+
+---
+
+```python
+def test_alert_rules_filename():
+    alert_rules = { "groups": ... }
+    name = "metrics_endpoint"
+    id = 1
+
+    expected = "..."
+
+*   result = rules_filename(alert_rules, name, id)
+
+    assert result == expected
+```
+
+---
+
+- Clear intent
+--
+
+- Setup as simple as your **real** inputs
+--
+
+- Lightweight
+- Parallelizable
+--
+
+- You might still need integration tests
+
+???
+- Since the side-effects matter in the end we will need to test them separately
+- This can be thought of as integration tests
+- Usually you need fewer of them compared to testing pure logic
+- This gives motivation to keep the side-effecting part as lean as possible
+
+---
+
+layout: true
+
+## Bonus: Property-Based Tests
+
+---
+
+???
+- When setting up test is that easy, you can do some real magic with the inputs
+
+---
+
+```python
+def test_no_slashes_in_output(
+  alert_rules, relation_name, relation_id):
+
+    result = rules_filename(
+      alert_rules, relation_name, relation_id)
+
+    assert "/" not in result
+```
+
+---
+
+```python
+@given(
+  alert_rules_st,
+  st.text(min_size=1),
+  st.integers(min_value=0))
+def test_no_slashes_in_output(
+  alert_rules, relation_name, relation_id):
+
+    result = rules_filename(
+      alert_rules, relation_name, relation_id)
+
+    assert "/" not in result
+```
+--
+
+- Single test, many test cases
+- Good for finding (minimized) edge cases
+- Requires some upfront effort for generation strategies
+
+---
+
+layout: true
+
+## Summary
+
+---
+
+- Testing pure functions is a joy
+--
+
+- At least compared to everything else
+--
+
+- Plenty of motivation to maximize purity in the codebase
+
+---
+
+layout: false
+class: center, middle, transition
+
+# Functional Validation
+
+---
+
+layout: true
+
+## Every Day I'm Validating
+
+---
+
+---
+
+```python
+ if is_valid_timespec(evaluation_interval):
+     return evaluation_interval
+{{content}}
+```
+--
+ else:
+     raise ConfigError("Invalid...")
+
+---
+
+```python
+alert_managers = self.fetch_alert_managers()
+{{content}}
+```
+--
+
+if not alert_managers:
+   raise ConfigError("No alert managers available")
+
+---
+
+```python
+if job.get("tls_config", {}):
+    if (...):
+        filename = with_dir_prefix("client.crt")
+        ...
+{{content}}
+```
+--
+    elif "cert" in tls_config or "key" in tls_config:
+        raise ConfigError("tls_config requires both ...")
+
+---
+
+```python
+
+   generate_prometheus_config()
+```
+
+---
+```python
+try:
+   generate_prometheus_config()
+except ConfigError as e:
+    logger.error("Failed to generate...")
+    return
+```
+
+---
+
+- Repetitive
+--
+
+- Error prone
+
+--
+
+- Secret communication channel across boundaries
+
+???
+- Exceptions used for implicit control flow
+- It's not very exceptional for data to be wrong
+--
+
+- Do we always want short circuiting?
+
+???
+- We are lacking the flexibility to collect errors
+--
+
+- Exceptions are not values
+???
+- And more generally, exceptions are not regular values
+- So we can't manipulate them easily
+- Functions are good at manipulating values
+- If we like using functions, and by the end of this workshop I really hope you do
+- We can strive to represent as many things as we can as values
+
+--
+
+- Disclaimer: do use Pydantic when you can
+
+---
+
+layout: true
+## It All Starts With Types
+---
+---
+
+```python
+
+class Result[E, A]
+```
+
+--
+
+```python
+
+
+class Ok(Result[E, A]):
+  value: A
+```
+--
+
+```python
+
+
+class Err(Result[E, A]):
+    error: E
+```
+
+???
+- This is similar to the `Result` type from Rust
+- Although it's a bit non-standard, for illustration purposes
+---
+
+```python
+@sealed
+class Result[E, A]
+```
+
+```python
+@final
+@dataclass(frozen=True)
+class Ok(Result[E, A]):
+  value: A
+```
+
+```python
+@final
+@dataclass(frozen=True)
+class Err(Result[E, A]):
+    error: E
+```
+---
+layout: true
+
+## Dictionary
+---
+
+```python
+if is_valid_timespec(evaluation_interval):
+    return evaluation_interval
+else:
+    raise ConfigError("Invalid...")
+```
+---
+
+```python
+if is_valid_timespec(evaluation_interval):
+    return Ok(evaluation_interval)
+else:
+    raise ConfigError("Invalid...")
+```
+---
+
+```python
+if is_valid_timespec(evaluation_interval):
+    return Ok(evaluation_interval)
+else:
+    return Err(ConfigError("Invalid..."))
+```
+---
+
+```python
+def check_interval(
+    evaluation_interval: str) -> str
+```
+---
+
+```python
+def check_interval(
+    evaluation_interval: str) -> Result[ConfigError, str]
+```
+
+--
+
+- Clear intent from the type signature
+- No surprises
+--
+
+- "Errors should never pass silently"
+
+---
+layout: true
+
+## Combinators
+
+---
+???
+- Once we see patterns emerge, we can start encoding them as reusable functions
+- Since `Result` is just a plain value, it's easy to write functions that operate on it
+
+---
+
+```python
+def build_config(interval: str): PromConfig
+```
+--
+
+```python
+match check_interval("..."):
+  case Ok(value):
+    return build_config(value)
+  case Err() as e:
+    return e
+```
+
+---
+
+```python
+def map[E, A, B](
+  result: Result[E, A],
+  f: Callable[[A], B]) -> Result[E, B]
+```
+
+???
+- This is the first time we are using higher-order functions
+- Probably the most recognizable trait of functional programming
+- And a great tool to reduce code repetition
+---
+
+```python
+check_interval("...").map(build_config)
+
+# Result[ConfigError, PromConfig]
+```
+
+???
+- Notice what we are no longer dealing with
+- We don't have to mention errors anywhere
+- The code is focused on "the happy path"
+- The other path is plumbed automatically by the `Result` type
+
+---
+
+```python
+def build_config(
+    interval: str): Result[ConfigError, PromConfig]
+```
+--
+```python
+check_interval("...").map(build_config)
+
+# Result[ConfigError, Result[ConfigError, PromConfig]]
+```
+
+---
+
+```python
+def build_config(
+    interval: str): Result[ConfigError, PromConfig]
+```
+```python
+check_interval("...").flat_map(build_config)
+
+# Result[ConfigError, PromConfig]
+```
+
+???
+- This is not something that we have to think about with exceptions
+- Unfortunately this is the price we pay for being explicit about our intents
+- In the long run, I think it's worth it
+
+---
+
+layout: true
+
+## Error Accumulation
+
+---
+???
+- With the `Result` type we have the flexibility to define whatever error type we want
+- Doesn't have to be an `Exception` type
+---
+
+```python
+type WithErrors[A] =
+  Result[Sequence[ConfigError], A]
+```
+
+---
+
+```python
+global_config: WithErrors[GlobalConfig]
+alerting: WithErrors[AlertingConfig]
+scrape_jobs: WithErrors[ScrapeConfig]
+{{content}}
+```
+
+--
+
+def combine_configs(
+  global_config: GlobalConfig,
+  alerting: AlertingConfig,
+  scrape: ScrapeConfig): PrometheusConfig
+{{content}}
+
+???
+- We could tear apart each value, extract the errors, and combine them
+- But it's a common thing to do and also very repetitive
+- So we have a combinator for it
+---
+
+```python
+def combine3[E, A, B, C, D](
+    r1: Result[Sequence[E], A],
+    r2: Result[Sequence[E], B],
+    r3: Result[Sequence[E], C],
+    f: Callable[[A, B, C], D]
+) -> Result[Sequence[E], D]:
+
+```
+
+???
+- Follow the types to figure out what this is doing
+- This look intimidating, and might feel like unnecessary plumbing
+- But you implement it once and you get error accumulation everywhere
+- Without having to implement some kind of custom logic for it
+
+--
+
+```python
+Result.combine3(
+    global_config,
+    alerting,
+    scrape_jobs).using(combine_configs)
+
+# WithErrors[PrometheusConfig]
+```
+
+???
+
+- Notice again how we are only dealing with the happy path
+- All the various failure combinations are completely transparent
+- Yet this is safe, since `Result` is keeping track for us
+
+---
+
+layout: true
+
+## Looping
+
+---
+
+```python
+jobs = []
+for job in get_metrics_jobs():
+    processed_job = process_job(job)
+
+    jobs.append(processed_job)
+```
+
+--
+
+```python
+def process_job(job: dict) -> dict:
+  ...
+  if "cert" in tls_config or "key" in tls_config:
+      raise ConfigError("tls_config requires both ...")
+
+  ...
+  return processed_job
+```
+
+---
+
+```python
+def process_job(job: dict) -> Result[ConfigError, dict]
+```
+
+--
+
+```python
+get_metrics_jobs().map(process_job)
+{{content}}
+```
+--
+
+# Sequence[WithErrors[dict]]
+
+---
+
+We need to flip the wrappers:
+
+```python
+Sequence[WithErrors[dict]] => WithErrors[Sequence[dict]]
+```
+
+--
+
+```python
+Result.sequence(
+  get_metrics_jobs().map(process_job)
+)
+
+# WithErrors[Sequence[dict]]
+```
+---
+layout: true
+
+## Traverse
+
+---
+
+```python
+Result.traverse(
+  get_metrics_jobs(),
+  process_job
+)
+
+# WithErrors[Sequence[dict]]
+```
+
+--
+
+- Not just plumbing
+- Accumulating errors instead of short-circuiting
+
+???
+- This goes beyond just plumbing to be able to loop
+- Instead of short-circuiting on the first error
+- We accumulate all errors into single list
+
+--
+
+- A very (very) common pattern
+
+---
+
+layout: true
+
+## And Many More...
+
+---
+
+---
+```python
+def map_error
+{{content}}
+```
+--
+
+def get_or_else
+{{content}}
+--
+
+def chain
+{{content}}
+--
+
+def on_error
+{{content}}
+--
+
+def optional
+{{content}}
+--
+
+def safe
+{{content}}
+--
+
+...
+
+--
+
+- A whole new language
+
+???
+- This approach scales to many different use cases
+
+--
+
+- For better or for worse
+
+---
+
+layout: true
+## Summary
+
+---
+
+- The `Result` type makes error handling explicit
+
+???
+
+- Errors become typed values, that we can manipulate like everything else
+
+--
+
+- Pairing well with pure functions (but not only)
+
+
+--
+
+- Still lets us focus on the happy path
+
+--
+
+- Functional "container types" are a common pattern
+- Learn once, reuse everywhere
+
+
+---
+
+layout: false
+class: center, middle, transition
+
+# Functional Pipelines
+
+---
+
+layout: true
+
+## In a Perfect World
+
+---
+
+---
+
+```python
+init: A
+{{content}}
+```
+--
+
+def step1(a: A) -> B
+{{content}}
+--
+
+def step2(b: B) -> C
+{{content}}
+--
+
+def step3(c: C) -> D
+{{content}}
+--
+
+step3(step2(step1(init)))
+
+---
+
+layout: true
+
+## Context Matters
+---
+
+- A value might be missing
+- Need extra arguments
+- Multiple branches
+- We might produce multiple values
+- Errors
+- Asynchrony
+- ...
+
+---
+
+layout: true
+
+## A Semblance of Reality
+
+---
+
+```python
+def pipeline(in1: In1, in2: In2) -> WithErrors[Out]
+{{content}}
+```
+--
+
+def step1_1(in1: In1) -> Optional[B1]
+def step1_2(in2: In2, b1: B1) -> WithErrors[B2]
+{{content}}
+
+--
+
+def step2_1(in1: In1) -> Sequence[C1]
+def step2_2(c1: C1) -> WithErrors[C2]
+def step2_3(c2s: Sequence[C2]) -> WithErrors[C3]
+{{content}}
+--
+
+def step3_1(in1: In1) -> WithErrors[D1]
+def step3_2(d1: D1) -> WithErrors[D2]
+def step3_3(d2: D2) -> WithErrors[D3]
+
+def step3_4(d1: D1, d2: D2, d3: D3) -> D4
+{{content}}
+--
+
+def step4(b2: B2, c3: C3, d4: D4) -> Out
+
+???
+
+- Because the type signatures are descriptive we know exactly what we need to handle
+- And the type checker will help along the way
+- Like assembling pieces of Lego
+- We just need to figure out what matches where, and apply the right combinator
+- It's a bit like "type driven development"
+- Since all the steps are self contained, we can tackle each sub-flow separately
+- And only later combine everything
+- This is very beneficial modularity and the ability to develop and test things in isolation
+
+---
+```python
+def step1_1(in1: In1) -> Optional[B1]
+def step1_2(in2: In2, b1: B1) -> WithErrors[B2]
+```
+
+--
+
+```python
+step1 = optional(step1_1(in1), missing_error)
+{{content}}
+```
+--
+    .flat_map(step1_2)
+---
+
+```python
+def step1_1(in1: In1) -> Optional[B1]
+def step1_2(in2: In2, b1: B1) -> WithErrors[B2]
+```
+
+```python
+step1 = optional(step1_1(in1), missing_error)
+    .flat_map(lambda b1: step1_2(in2, b1))
+```
+---
+
+```python
+def step1_1(in1: In1) -> Optional[B1]
+def step1_2(in2: In2, b1: B1) -> WithErrors[B2]
+```
+
+```python
+step1 = optional(step1_1(in1), missing_error)
+    .flat_map(partial(step1_2, in2))
+{{content}}
+```
+--
+
+# WithErrors[B2]
+
+---
+```python
+def step2_1(in1: In1) -> Sequence[C1]
+def step2_2(c1: C1) -> WithErrors[C2]
+def step2_3(c2s: Sequence[C2]) -> WithErrors[C3]
+```
+
+--
+
+```python
+step2 = traverse(step2_1(in1), step2_2)
+{{content}}
+```
+--
+
+# WithErrors[Sequence[C2]]
+
+---
+
+```python
+def step2_1(in1: In1) -> Sequence[C1]
+def step2_2(c1: C1) -> WithErrors[C2]
+def step2_3(c2s: Sequence[C2]) -> WithErrors[C3]
+```
+
+```python
+step2 = traverse(step2_1(in1), step2_2)
+  .flat_map(step2_3)
+
+# WithErrors[C3]
+```
+
+---
+
+layout: true
+## Extreme Nestiness
+
+```python
+def step3_1(in1: In1) -> WithErrors[D1]
+def step3_2(d2: D1) -> WithErrors[D2]
+def step3_3(d3: D2) -> WithErrors[D3]
+
+def step3_4(d1: D1, d2: D2, d3: D3) -> D4
+```
+
+---
+--
+
+```python
+step3 =
+  step3_1(in1)
+    .flat_map(step3_2)
+    .flat_map(step3_3)
+    .map(step3_4)
+```
+
+---
+
+```python
+step3 =
+  step3_1(in1)
+
+      step3_2(  )
+
+          step3_3(  )
+
+                step3_4(          )))))
+```
+---
+
+```python
+step3 =
+  step3_1(in1)
+    .flat_map((lambda d1:
+      step3_2(d1)
+
+          step3_3(  )
+
+                step3_4(d1,       )))))
+```
+---
+
+```python
+step3 =
+  step3_1(in1)
+    .flat_map((lambda d1:
+      step3_2(d1)
+        .flat_map(lambda d2:
+          step3_3(d2)
+
+                step3_4(d1, d2,   )))))
+```
+
+---
+
+```python
+step3 =
+  step3_1(in1)
+    .flat_map((lambda d1:
+      step3_2(d1)
+        .flat_map(lambda d2:
+          step3_3(d2)
+             .map(lambda d3:
+                step3_4(d1, d2, d3)))))
+{{content}}
+```
+--
+
+# WithErrors[D4]
+
+???
+- The nested structure is unavoidable without special syntax support
+
+---
+```python
+step3 = Result.do(
+    step3_4(d1, d2, d3)
+    for d1 in step3_1(in1)
+    for d2 in step3_2(d1)
+    for d3 in step3_3(d2)
+)
+```
+
+--
+
+- Provided by a library, requires a typechecking plugin
+
+
+---
+layout: true
+
+## Finally
+
+---
+
+```python
+def step4(b2: B2, c3: C3, d4: D4) -> Out
+```
+
+--
+
+```python
+def pipeline(in1: In1, in2: In2) -> WithErrors[Out]:
+{{content}}
+
+```
+
+--
+
+    step1: WithErrors[B2] = ...
+
+    step2: WithErrors[C3] = ...
+
+    step3: WithErrors[D4] = ...
+{{content}}
+--
+
+    return combine3(step1, step2, step3).using(step4)
+
+???
+
+- Notice that we are only dealing the happy path, no explicit error handling or accumulation logic
+
+---
+
+layout: true
+
+## Summary
+
+---
+
+- We can split complex pipelines into small pieces
+--
+
+- Modular
+- Easy to test
+
+--
+
+- Use functional combinators to build things back up
+
+--
+
+- Follow the types, focus on the happy path
+
+--
+
+- Similar workflow for other containers
+- `Maybe`, `Future`, `Context`, ...
+
+???
+- This may seem like a lot to take in just for some plumbing
+- But these concepts reusable across different container types
+- You learn the idea behind things like `flat_map` once, and you get to reuse that knowledge across different types
+- And even different languages
+
+---
+
+layout: false
+class: center, middle, transition
+
+# Functional Domain Modeling
+
+---
+
+layout: true
+
+## Yet Another Shopping Example
+---
+
+---
+
+```python
+class User:
+    session_id: str
+    user_id: str
+    email: str
+    loyalty_points: int
+    shipping_address: str
+```
+
+--
+
+- For illustration purposes only
+- In real code, avoid using simple `str/int`
+
+--
+
+- A new requirement: users pending verification
+
+---
+
+```python
+class User:
+    session_id: str
+    user_id: str
+    email: str
+    loyalty_points: int
+    shipping_address: str
+    verification_token: Optional[str]
+```
+---
+
+```python
+class User:
+    session_id: str
+    user_id: Optional[str]
+    email: str
+    loyalty_points: Optional[int]
+    shipping_address: Optional[str]
+    verification_token: Optional[str]
+```
+--
+
+- A new requirement: guest users
+
+---
+
+```python
+class User:
+    session_id: str
+    user_id: Optional[str]
+    email: Optional[str]
+    loyalty_points: Optional[int]
+    shipping_address: Optional[str]
+    verification_token: Optional[str]
+```
+---
+
+```python
+class User:
+    session_id: str
+    # if user_id is set, the account is verified
+    # email must be present
+    user_id: Optional[str] = None
+    # if email is set, the user has registered
+    email: Optional[str] = None
+    # only meaningful for pending verification
+    # must be present if email is set
+    # but not for a verified user
+    verification_token: Optional[str] = None
+    # only meaningful for active users
+    # must be present if user_id is set
+    loyalty_points: Optional[int] = None
+    shipping_address: Optional[str] = None
+```
+---
+
+```python
+def process_user_record(user: User):
+{{content}}
+```
+
+--
+  if user.user_id: # active user
+{{content}}
+
+--
+    send_receipt(user.email)
+    give_discount(
+      user.user_id, user.loyalty_points)
+    ship_to(user.shipping_address)
+{{content}}
+--
+
+  elif user.email: # pending
+{{content}}
+--
+    send_verification_email(
+      user.email, user.verification_token)
+{{content}}
+--
+
+  else: # guest
+{{content}}
+--
+    show_guest_banner()
+
+---
+
+```python
+def process_user_record(user: User):
+  if user.user_id: # active user
+    send_receipt(cast(str, user.email))
+    give_discount(
+      user.user_id, cast(int, user.loyalty_points))
+    ship_to(cast(str, user.shipping_address))
+
+  elif user.email: # pending
+    send_verification_email(
+      user.email, cast(str, user.verification_token))
+
+  else: # guest
+    show_guest_banner()
+```
+
+---
+
+```python
+def process_user_record(user: User):
+  if user.user_id:
+    assert user.email is not None
+    assert user.loyalty_points is not None
+    assert user.shipping_address is not None
+
+    send_receipt(user.email)
+    give_discount(
+      user.user_id, user.loyalty_points)
+    ship_to(user.shipping_address)
+  elif user.email:
+    assert user.verification_token is not None
+
+    send_verification_email(
+      user.email, user.verification_token)
+  else:
+      show_guest_banner()
+```
+
+- Assumptions break over time and space
+
+---
+
+layout: true
+
+## What Went Wrong?
+---
+
+```python
+class User:
+    session_id: str
+    # if user_id is set, the account is verified
+    # email must be present
+    user_id: Optional[str] = None
+    # if email is set, the user has registered
+    email: Optional[str] = None
+    # only meaningful for pending verification
+    # must be present if email is set
+    # but not for a verified user
+    verification_token: Optional[str] = None
+    # only meaningful for active users
+    # must be present if user_id is set
+    loyalty_points: Optional[int] = None
+    shipping_address: Optional[str] = None
+```
+
+--
+
+- "Explicit is better than implicit"
+
+---
+
+layout: true
+
+## Remodeling
+
+---
+
+```python
+class Active:
+    session_id: str
+    user_id: str
+    email: str
+    loyalty_points: int
+    shipping_address: str
+{{content}}
+```
+
+--
+
+class PendingVerification:
+    session_id: str
+    email: str
+    verification_token: str
+{{content}}
+
+--
+
+class Guest:
+    session_id: str
+{{content}}
+--
+
+type User = Active | PendingVerification | Guest
+
+???
+- Look at how descriptive the `User` type is now
+- It tells us the whole story
+- It's enforced by the typechecker
+- Not just by some comments
+- We turned an implicit state space into an explicit one
+- This technique is not unique to functional programming
+- But it was developed in that context
+- And pairs well with our desire to be maximally descriptive with our types
+
+---
+
+```python
+def process_user(user: User):
+  match user:
+{{content}}
+```
+--
+    case Active(email, user_id, points, address):
+{{content}}
+--
+        send_receipt(email)
+        give_discount(user_id, points)
+        ship_to(address)
+{{content}}
+--
+
+    case PendingVerification(email, token):
+{{content}}
+--
+        send_verification_email(email, token)
+{{content}}
+--
+
+    case Guest():
+{{content}}
+--
+      show_guest_banner()
+{{content}}
+--
+
+    case _ as unreachable:
+      assert_never(unreachable)
+---
+
+- Data classes with unions are a powerful combination
+--
+
+- A.K.A.:
+  - Algebraic Data Types
+  - Sums and products
+
+--
+- Allowing for precise and safe domain models
+
+--
+
+- Turning implicit flow control into explicit data
+
+???
+- What was before a bunch of if/else calls
+- Turns into just another case in our data type
+
+--
+
+- Separating decision from action
+
+???
+- If before on every branch we had to perform an action
+- Now we can just remember it as another case in our data type
+- Then pass it along into another place
+- This will we the most powerful tool we have to separate logic (if/else)
+- From actually performing side-effects
+
+---
+
+layout: true
+
+## Disentangling Decisions
+---
+
+```python
+config = ...
+layer = ...
+{{content}}
+```
+--
+
+should_reload = ...
+should_restart = ...
+{{content}}
+
+---
+
+```python
+if config:
+  push(config)
+
+  if (not should_restart
+      and should_reload):
+    reload()
+
+if should_restart:
+  update(layer)
+  restart()
+```
+
+--
+
+.adt-example.push-reload[
+```python
+class PushReload:
+  config: Config
+```
+]
+
+--
+
+.adt-example.push-restart[
+```python
+class PushRestart:
+  config: Config
+  layer: Layer
+```
+]
+
+--
+
+.adt-example.restart-only[
+```python
+class RestartOnly:
+  layer: Layer
+```
+]
+
+--
+
+.adt-example.noop[
+```python
+class Noop
+```
+]
+
+--
+
+.adt-example.union[
+  ```python
+type Outcome =
+    PushReload
+  | PushRestart
+  | RestartOnly
+  | Noop
+  ```
+]
+
+???
+- The `Outcome` type "answers questions" like "on what conditions nothing happens?", or "when do we restart?"
+
+---
+
+```python
+def compute_outcome(...) -> Outcome
+```
+
+--
+
+```python
+def apply_outcome(outcome: Outcome) -> None
+{{content}}
+```
+--
+  match outcome
+    case PushReload(config):
+      push(config)
+      reload()
+    case PushRestart(config, layer):
+      push(config)
+      update(layer)
+      restart()
+    case RestartOnly(layer):
+      update(layer)
+      restart()
+    case Noop():
+      pass
+    case _ as unreachable:
+      assert_never(unreachable)
+???
+
+- Since complex decisions are where bugs hide, disentangling them from side-effects and making them concrete means easier tests.
+
+---
+
+layout: true
+
+## Summary
+
+---
+
+- ADTs are the best thing since sliced bread
+--
+
+- The 80/20 of functional programming
+--
+
+- Powerful for modeling and logic disentanglement
+
+--
+- Form follows function, function follows form
+
+--
+- "Make illegal states unrepresentable"
+
+---
+
+layout: false
+class: center, middle, transition
+
+# Functional Core, <br /> Imperative Shell
+---
+
+layout: true
+## No Plan Survives Contact with Reality
+---
+
+- Pure functions are great
+- Testable, composable, reusable, ...
+
+--
+
+- But you have to talk to the real world
+
+--
+
+- How do we maximize purity in real code?
+
+---
+
+Split your code into three parts:
+
+--
+
+```txt
+    ┌─────────┐       ┌───────────┐      ┌─────────┐
+    │         │       │           │      │         │
+    │  Fetch  ├──────►│  Compute  ├─────►│  Apply  │
+    │         │       │           │      │         │
+    └─────────┘       └───────────┘      └─────────┘
+{{content}}
+```
+--
+         ▲                  ▲                 ▲     
+         │                  │                 │     
+         │                  │                 │     
+         │           Functional core          │     
+         │                                    │     
+         │                                    │     
+         └───────── Imperative shell ─────────┘     
+
+---
+
+The challenge:
+- Make the core maximally smart
+- Make the shell maximally dumb
+
+--
+
+<br />
+The tools:
+- Functional domain modeling
+- Functional pipelines
+- Functional validation
+
+---
+
+layout: true
+
+## The Plan
+
+---
+
+```python
+class Input:
+  current_services: Mapping
+  old_config_hash: str
+  ...
+{{content}}
+```
+--
+
+type Outcome = PushReload | PushRestart | ...
+{{content}}
+--
+
+type ProcessError =
+  FetchError | ConfigErrors | ApplyError | ...
+
+---
+
+```python
+class Actions(Protocol):
+  def push_config(
+    self, config: Mapping) -> Result[PushError, None]
+
+  def reload_config(
+    self) -> Result[ReloadError, None]
+
+  def container_replan(
+    self, layer: Layer) -> Result[ReplanError, None]
+
+  ...
+```
+
+???
+- You don't have to use abstract interfaces like this
+- But phrasing your "atomic" actions help with design
+- And adds another layer of testability
+
+---
+```python
+# imperative shell
+def fetch() -> Result[FetchError, Input]
+{{content}}
+```
+--
+
+# functional core
+def compute(
+  input: Input) -> Result[ConfigErrors, Outcome]
+{{content}}
+--
+
+# imperative shell
+def apply(
+  outcome: ConfigOutcome) -> Result[ApplyError, None]
+{{content}}
+--
+
+def error_handler(e: ProcessError) -> None
+---
+
+```python
+fetch()
+  .flat_map(compute)
+  .flat_map(apply)
+  .on_error(error_handler)
+
+# None
+```
+---
+
+layout: true
+## Summary
+
+---
+
+- We can push side-effects to the outer edges
+--
+
+- Make the core smart, and the shell dumb
+--
+
+- Not a magic bullet
+
+--
+
+- You don't have to go "all in"
+
+
+---
+
+layout: false
+class: center, middle, transition
+
+# Case Study
+---
+
+layout: false
+class: center, middle, transition
+
+# Hands-on practice
+
+---
+
+layout: true
+## Summary
+---
+
+- Pure functions are islands of sanity
+--
+
+- Maintainable, testable, reusable, ...
+--
+
+- We can extract large fragments of purity by:
+  - Modeling with ADTs
+  - Composing functional pipelines
+  - Using explicit types to drive the process
+--
+
+- Keep that functional edge sharp
+
+---
+
+layout: true
+
+## Resources
+
+---
+
+- [Awesome Functional Python](https://github.com/sfermigier/awesome-functional-python)
+- [OSlash](https://github.com/dbrattli/OSlash/): educational functional programming in modern Python
+- [Returns](https://github.com/dry-python/returns): typed functional programming
+- [Pyrsistent](https://github.com/tobgu/pyrsistent): persistent data structures
+- [Toolz](https://github.com/pytoolz/toolz): functional utilities
+
+- Videos:
+  - [Functional Core, Imperative Shell](https://www.destroyallsoftware.com/screencasts/catalog/functional-core-imperative-shell)
+  - [Make Illegal AI Edits Unrepresentable](https://www.youtube.com/watch?v=sPjHsMGKJSI)
+
+---
+
+layout: false
+class: transition
+
+.endQuote[
+> If I don't have some cake soon, I might die.
+]
+
+.endQuote.footnote[Stanley Hudson, The Office]
+
+.horizontalCentered.questions[Thank you! Questions?]
+
+.centered.githubLink[https://github.com/ncreep/fp-edge-canonical]
+
+.centered.linksFin.linkStackFin[[linksta.cc/@ncreep](https://linksta.cc/@ncreep)]
+
+</textarea>
+    <script src="remark-0.14.0.min.js"></script>
+
+    <!-- For Scala 3 highlighting support -->
+    <link rel="stylesheet" href="highlight.11.7.0.magula.min.css" />
+    <script src="highlight.11.7.0.min.js"></script>
+    <script src="highlight.11.7.0.scala.min.js"></script>
+
+    <script>
+      // overriding the built-in highlighter with the newer version
+      remark.highlighter.engine = hljs;
+    </script>
+
+    <script type="text/javascript">
+        var slideshow = remark.create({
+      	countIncrementalSlides: false,
+        highlightLines: true,
+      	highlightLanguage: 'python',
+      	highlightStyle: 'magula' // default, googlecode, magula, vs
+      });
+    </script>
+  </body>
+</html>
