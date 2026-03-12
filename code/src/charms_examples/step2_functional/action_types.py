@@ -1,10 +1,7 @@
-from typing import TYPE_CHECKING, Mapping, Protocol
+from typing import Mapping, Protocol
 
 from error_types import *
 from ops.pebble import Layer
-
-if TYPE_CHECKING:
-    pass
 
 from result import *
 
